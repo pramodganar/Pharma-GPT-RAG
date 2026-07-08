@@ -50,15 +50,24 @@ EXAMPLES = [
     "What is a budget impact analysis?",
 ]
 
+# Colours are theme-aware: light defaults, brighter accent + translucent pills under
+# a dark OS/browser theme. (Covers prefers-color-scheme; Streamlit's own manual theme
+# toggle is not exposed to CSS, so that edge case falls back to the light palette.)
 STYLE = """
 <style>
-h1 { color: #0e7c86; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 0; }
-.pharma-sub { color: #5c6b73; font-size: 0.95rem; margin: 2px 0 8px 0; }
+:root { --pharma-accent: #0e7c86; --pharma-muted: #5c6b73; --pharma-pill: #e6f2f3; }
+@media (prefers-color-scheme: dark) {
+  :root { --pharma-accent: #4fd1c5; --pharma-muted: #9aa7ad;
+          --pharma-pill: rgba(79,209,197,0.16); }
+}
+h1 { color: var(--pharma-accent); font-weight: 700; letter-spacing: -0.5px; margin-bottom: 0; }
+.pharma-sub { color: var(--pharma-muted); font-size: 0.95rem; margin: 2px 0 2px 0; }
+.pharma-scope { color: var(--pharma-muted); font-size: 0.8rem; margin: 0 0 10px 0; }
 .src-head { margin-bottom: 2px; }
-.src-term { color: #0e7c86; font-weight: 600; }
-.src-pill { background: #e6f2f3; color: #0e7c86; padding: 1px 8px;
+.src-term { color: var(--pharma-accent); font-weight: 600; }
+.src-pill { background: var(--pharma-pill); color: var(--pharma-accent); padding: 1px 8px;
             border-radius: 10px; font-size: 0.72rem; margin-left: 6px; }
-.src-rel { color: #93a1a8; font-size: 0.75rem; margin-left: 8px; }
+.src-rel { color: var(--pharma-muted); font-size: 0.75rem; margin-left: 8px; }
 .stButton > button { border-radius: 8px; }
 </style>
 """
@@ -102,6 +111,11 @@ st.markdown(
     "WHO/PPRI Glossary of Pharmaceutical Terms (2016).</div>",
     unsafe_allow_html=True,
 )
+st.markdown(
+    "<div class='pharma-scope'>Scope: pharmaceutical policy &amp; health economics "
+    "(pricing, HTA, ATC/DDD, pharmacovigilance). Not clinical or dosing advice.</div>",
+    unsafe_allow_html=True,
+)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -115,6 +129,13 @@ with st.sidebar:
     if st.button("Clear chat", use_container_width=True, disabled=not st.session_state.messages):
         st.session_state.messages = []
         st.rerun()
+    st.divider()
+    st.caption("In-scope examples")
+    for i, q in enumerate(EXAMPLES):
+        if st.button(q, key=f"side_ex_{i}", use_container_width=True):
+            st.session_state.pending = q
+            st.rerun()
+    st.divider()
     st.caption("To rebuild the index, run `python -m src.embed_store` from the project root.")
 
 typed = st.chat_input("Ask about a pharmaceutical term")
