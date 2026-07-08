@@ -30,8 +30,11 @@ tokens; a one-time ~9s index build on a cold deploy).
 ## Corpus
 
 One 140-page PDF with a real text layer (no OCR). Glossary content is pages 9-128;
-front matter (1-8) and the reference list (129-140) are excluded. Parsed into
-**413 entries** `{term, definition_text, sources[], page_start}`. The one
+front matter (1-8) and the reference list (129-140) are excluded. Its scope is
+pharmaceutical **policy and health economics** — pricing, reimbursement, HTA,
+ATC/DDD, pharmacovigilance — not drug formulations or clinical dosing, so formulation
+questions (e.g. enteric coating) fall outside it by design and are refused. Parsed
+into **413 entries** `{term, definition_text, sources[], page_start}`. The one
 non-obvious thing: pdfplumber renders bold text (every term heading) as each glyph
 repeated four times — `AAAABBBBCCCC` for `ABC`. That artifact is both the problem
 and the solution — it is collapsed to recover the term and used as the heading
