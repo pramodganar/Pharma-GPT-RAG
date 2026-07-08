@@ -1,0 +1,7 @@
+# Generation-eval dependencies for src/eval_ragas.py only. Kept separate from
+# requirements.txt so RAGAS's transitive deps do not disturb the deploy stack's
+# protobuf/grpcio pins. Install into the same venv when you want to run RAGAS:
+#   pip install -r requirements-eval.txt
+ragas==0.2.10
+datasets==3.2.0
+langchain-huggingface==0.1.2

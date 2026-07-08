@@ -1,0 +1,23 @@
+# CPU-only torch so the Streamlit Cloud image fits the free tier: the model runs on
+# CPU, but the default build pulls ~2GB of unused nvidia CUDA packages. The +cpu wheel
+# is served from the extra index below and needs the Python version pinned to 3.12.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.12.1+cpu
+
+langchain==0.3.27
+langchain-ollama==0.3.10
+langchain-google-genai==2.1.12
+sentence-transformers==3.4.1
+chromadb==0.5.23
+pdfplumber==0.11.4
+pillow==11.1.0
+streamlit==1.41.1
+python-dotenv==1.0.1
+pytest==8.3.4  # test-only; unused at runtime, kept so a fresh clone can run the suite
+
+# Pinned to resolve the langchain-google-genai / streamlit protobuf conflict:
+# streamlit needs protobuf<6, google-genai's newer stack wants >=6. 5.29 + the
+# matching grpc pair satisfies both.
+protobuf==5.29.6
+grpcio==1.71.0
+grpcio-status==1.71.0
