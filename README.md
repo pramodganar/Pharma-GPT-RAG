@@ -6,10 +6,9 @@ terminology, grounded strictly in the WHO/PPRI *Glossary of Pharmaceutical Terms
 from them, citing the term and page. If the glossary does not cover a question, it
 says so instead of guessing.
 
-<!-- Replace YOUR_APP_URL once deployed to Streamlit Community Cloud. -->
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://YOUR_APP_URL.streamlit.app)
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://pharma-gpt-rag-dpstrt54vjs64peusbfvzm.streamlit.app/)
 
-**Live demo:** _deploying to Streamlit Community Cloud — link here_
+**Live demo:** https://pharma-gpt-rag-dpstrt54vjs64peusbfvzm.streamlit.app/
 
 <!-- Add a UI screenshot at docs/screenshot.png and uncomment:
 ![Pharma-GPT chat UI with the per-answer Sources panel](docs/screenshot.png) -->
