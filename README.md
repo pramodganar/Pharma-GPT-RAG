@@ -103,13 +103,26 @@ Two checks on the answers themselves, layered on the retrieval hit@k above:
   LLM judge, so it reproduces offline.
 - **RAGAS faithfulness / answer relevancy / context precision.** The harness
   (`src/eval_ragas.py`, deps in `requirements-eval.txt`) scores the 6 in-scope
-  answers with an LLM-as-judge. The triad needs ~18+ judge calls, which exceeds the
-  Gemini free-tier daily cap (20 requests/day), so scores are not tabulated here; run
-  it against a paid key or a local Ollama judge to reproduce. The generated records
-  are committed (`data/processed/ragas_records.json`), so the judged inputs are
-  inspectable without a run. RAGAS judges an LLM with an LLM — treat it as a
-  regression proxy anchored to the retrieval hit@k and the refusal check above, not
-  as ground truth.
+  answers with an LLM-as-judge. Judged with the repo's own local provider
+  (`llama3.1` 8B via Ollama) because the triad needs ~40 judge calls, over the
+  Gemini free-tier daily cap:
+
+  ```
+  faithfulness         0.68
+  answer relevancy     0.91
+  context precision    1.00
+  ```
+
+  Context precision 1.00: the relevant glossary entry was ranked usefully in the
+  context for all 6 questions, consistent with direct hit@1 = 1.00. Faithfulness
+  0.68 is the judge-noisiest metric: an 8B judge extracts and verifies claims
+  imperfectly and under-credits paraphrase, so read it as a floor and a regression
+  baseline pinned to this judge, not an absolute — a stronger judge moves the
+  number. The judged inputs are committed (`data/processed/ragas_records.json`),
+  so the records are inspectable without a run; reproduce with
+  `LLM_PROVIDER=ollama python -m src.eval_ragas`. RAGAS judges an LLM with an
+  LLM — the non-circular anchors remain the retrieval hit@k and the refusal check
+  above.
 
 ## Setup
 

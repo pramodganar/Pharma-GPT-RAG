@@ -84,6 +84,21 @@ hit@3 are one abbreviation ("copay", spelled "Co-payment") and three terse parap
 (e.g. affordability of a new treatment -> Budget Impact Analysis) — the known weakness
 of dense-only retrieval on short or low-content queries.
 
+## Generation evaluation
+
+Layered on the retrieval hit@k (which is generation-free and non-circular):
+
+- **Out-of-scope refusal 3/3.** A drug-dose question, a general-knowledge question,
+  and a clinical recommendation are each refused with the
+  glossary-does-not-define-it response. Checked offline from committed records; a
+  refusal must match a marker *and* stay short, so refuse-then-guess counts as a
+  failure.
+- **RAGAS** over the 6 in-scope records, judged locally with `llama3.1` 8B via
+  Ollama: faithfulness 0.68, answer relevancy 0.91, context precision 1.00.
+  Context precision 1.00 agrees with direct hit@1 = 1.00. Faithfulness is the
+  noisiest metric under a small judge (imperfect claim extraction, under-credited
+  paraphrase) — it is a regression baseline pinned to this judge, not ground truth.
+
 ## Known limitations
 
 - **Single document, 2016 vintage.** The assistant knows this glossary and nothing
