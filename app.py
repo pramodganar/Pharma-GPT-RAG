@@ -84,6 +84,8 @@ def _unique_sources(sources):
 
 
 def _render_sources(sources):
+    # term/page are interpolated into raw HTML; they come from the parsed glossary
+    # (a trusted, static corpus), never from user input, so this is not injectable.
     uniq = _unique_sources(sources)
     with st.expander(f"Sources ({len(uniq)})"):
         for d in uniq:

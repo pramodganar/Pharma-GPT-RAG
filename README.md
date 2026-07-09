@@ -10,9 +10,6 @@ says so instead of guessing.
 
 **Live demo:** https://pharma-gpt-rag-dpstrt54vjs64peusbfvzm.streamlit.app/
 
-<!-- Add a UI screenshot at docs/screenshot.png and uncomment:
-![Pharma-GPT chat UI with the per-answer Sources panel](docs/screenshot.png) -->
-
 ## Problem
 
 Regulatory-affairs and market-access teams repeatedly hit unfamiliar pharma-policy
@@ -29,7 +26,10 @@ tokens; a one-time ~9s index build on a cold deploy).
 
 ## Corpus
 
-One 140-page PDF with a real text layer (no OCR). Glossary content is pages 9-128;
+The WHO Collaborating Centre / PPRI [*Glossary of Pharmaceutical Terms*, 2016
+update](https://ppri.goeg.at/sites/ppri.goeg.at/files/inline-files/Glossary_Update2016_final.pdf)
+(listed on the [PPRI glossary page](https://ppri.goeg.at/about_translations)) —
+one 140-page PDF with a real text layer (no OCR). Glossary content is pages 9-128;
 front matter (1-8) and the reference list (129-140) are excluded. Its scope is
 pharmaceutical **policy and health economics** — pricing, reimbursement, HTA,
 ATC/DDD, pharmacovigilance — not drug formulations or clinical dosing, so formulation
@@ -65,17 +65,26 @@ detector. See [DECISIONS.md](DECISIONS.md).
 
 30 gold queries, 10 per category; the expected term must appear in the top-k
 retrieved chunks. Reproducible — `python -m src.eval_retrieval` prints the same
-table every run (see *Design decisions* for why).
+tables every run (see *Design decisions* for why). A BM25 baseline over the same
+chunks and queries is scored alongside, so the dense numbers have something dumb
+to beat.
 
 ```
-category         n    hit@1    hit@3    hit@5
----------------------------------------------
-direct          10     1.00     1.00     1.00
-paraphrased     10     0.40     0.70     0.70
-abbreviation    10     0.70     0.90     0.90
----------------------------------------------
-overall         30     0.70     0.87     0.87
+dense (all-MiniLM-L6-v2):              BM25 lexical baseline:
+category      n  hit@1  hit@3  hit@5   category      n  hit@1  hit@3  hit@5
+------------------------------------   ------------------------------------
+direct       10   1.00   1.00   1.00   direct       10   0.80   1.00   1.00
+paraphrased  10   0.40   0.70   0.70   paraphrased  10   0.50   0.70   0.70
+abbreviation 10   0.70   0.90   0.90   abbreviation 10   0.80   0.90   0.90
+------------------------------------   ------------------------------------
+overall      30   0.70   0.87   0.87   overall      30   0.70   0.87   0.87
 ```
+
+The baseline is a finding, not a formality: BM25 ties dense overall (0.70 / 0.87 /
+0.87) and edges it at hit@1 on paraphrases and abbreviations, while dense wins
+direct hit@1 (1.00 vs 0.80). The two retrievers miss different queries — only 3 of
+30 are missed by both at hit@3, so a hybrid union would reach 0.90 — which is why
+hybrid BM25+dense is the first upgrade rather than a bigger embedding model.
 
 Paraphrase queries are worded to share few words with their target definition, so
 that score measures semantic retrieval, not lexical overlap. `hit@3 == hit@5`
@@ -104,8 +113,9 @@ Two checks on the answers themselves, layered on the retrieval hit@k above:
 
 ## Setup
 
-Python 3.11+ (developed on Windows; requirements resolve on macOS/Linux too). From
-the project root:
+Python 3.11–3.12 (tested on 3.11; developed on Windows, requirements resolve on
+macOS/Linux too — the pinned wheels have no 3.13+/3.14 builds). From the project
+root:
 
 ```
 python -m venv venv
@@ -121,9 +131,9 @@ build the index without the source PDF:
 python -m src.embed_store
 ```
 
-Re-parsing the PDF is only needed if you have the source file and want to change the
-ingest logic. Put `Pharmacy_Dictionary.pdf` at `data/raw/Pharmacy_Dictionary.pdf`
-first, then:
+Re-parsing the PDF is only needed to change the ingest logic. Download the 2016
+glossary PDF (link in *Corpus* above), save it as `data/raw/Pharmacy_Dictionary.pdf`,
+then:
 
 ```
 python -m src.ingest        # rewrites data/processed/entries.json
@@ -133,8 +143,8 @@ python -m src.embed_store
 The Streamlit app also builds the index on first boot if it is missing, so running
 `src.embed_store` by hand is optional locally.
 
-Pick a provider. **Path A — Gemini (fastest, deployable):** get a free key at Google
-AI Studio, then create `.env` from `.env.example`:
+Pick a provider. **Path A — Gemini (the hosted-demo path):** get a free key at
+Google AI Studio, then create `.env` from `.env.example`:
 
 ```
 LLM_PROVIDER=gemini
@@ -196,12 +206,14 @@ it. Deploy steps:
 src/ingest.py         PDF -> structured entries (data/processed/entries.json)
 src/chunking.py       entries -> term-aware chunks
 src/embed_store.py    chunks -> ChromaDB (chroma_db/)
-src/eval_retrieval.py hit@k over a 30-query gold set
+src/eval_retrieval.py hit@k over a 30-query gold set (dense + BM25 baseline)
 src/eval_ragas.py     generation eval (RAGAS + out-of-scope refusal rate)
 src/llm_factory.py    provider selection (gemini | ollama)
 src/rag_chain.py      retrieve -> prompt -> answer
 app.py                Streamlit chat UI
 src/config.py         all paths, model names, and parameters
+report.md             long-form project report (data profile, eval, limitations)
+DECISIONS.md          running log of design choices and rejected alternatives
 ```
 
 ## Key design decisions
@@ -236,8 +248,9 @@ knowing:
   glossary, so it has no dosage-form or clinical entries — those questions are
   refused, not answered. **Not medical advice.**
 - **Dense-only retrieval.** Weak on bare acronyms / closed-form spellings (e.g.
-  "copay" vs the glossary's "Co-payment"). Hybrid BM25+dense would close most of the
-  gap.
+  "copay" vs the glossary's "Co-payment"). Measured against the BM25 baseline: a
+  hybrid union would lift hit@3 from 0.87 to 0.90, but 3 of 30 queries ("copay"
+  among them) are missed by both retrievers and need alias expansion instead.
 - **Small eval sets.** Retrieval is scored on 30 gold queries and generation on
   6 in-scope + 3 adversarial records — enough to catch regressions, not to make
   fine-grained comparisons between retrievers or models.

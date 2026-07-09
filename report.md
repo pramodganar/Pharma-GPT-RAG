@@ -10,7 +10,8 @@ term and page it used.
 
 ## Data profile
 
-- Source: one 140-page A4 PDF with a real text layer (no OCR).
+- Source: the [2016 update of the PPRI glossary](https://ppri.goeg.at/sites/ppri.goeg.at/files/inline-files/Glossary_Update2016_final.pdf)
+  — one 140-page A4 PDF with a real text layer (no OCR).
 - Glossary content is pages 9-128. Pages 1-8 are front matter (cover, intro, PPRI
   background); pages 129-140 are the reference list and acknowledgements. Both are
   excluded.
@@ -50,17 +51,25 @@ active.
 ## Retrieval evaluation
 
 30 gold queries, 10 per category, expected terms drawn from parsed entries. Metric is
-hit@k — the expected term appears in the top-k retrieved chunk metadata.
+hit@k — the expected term appears in the top-k retrieved chunk metadata. A BM25
+lexical baseline runs over the same chunks and queries.
 
 ```
-category         n    hit@1    hit@3    hit@5
----------------------------------------------
-direct          10     1.00     1.00     1.00
-paraphrased     10     0.40     0.70     0.70
-abbreviation    10     0.70     0.90     0.90
----------------------------------------------
-overall         30     0.70     0.87     0.87
+dense (all-MiniLM-L6-v2):              BM25 lexical baseline:
+category      n  hit@1  hit@3  hit@5   category      n  hit@1  hit@3  hit@5
+------------------------------------   ------------------------------------
+direct       10   1.00   1.00   1.00   direct       10   0.80   1.00   1.00
+paraphrased  10   0.40   0.70   0.70   paraphrased  10   0.50   0.70   0.70
+abbreviation 10   0.70   0.90   0.90   abbreviation 10   0.80   0.90   0.90
+------------------------------------   ------------------------------------
+overall      30   0.70   0.87   0.87   overall      30   0.70   0.87   0.87
 ```
+
+BM25 ties dense overall and edges it at hit@1 on paraphrases and abbreviations;
+dense wins direct hit@1. The retrievers miss different queries: 3 of 30 are missed
+by both at hit@3, so a hybrid union would reach 0.90. The shared misses ("copay"
+and two terse paraphrases) have neither a lexical nor a semantic bridge to their
+entries — those need acronym/alias expansion, not a better ranker.
 
 These numbers are reproducible: retrieval uses a wide HNSW search beam
 (`hnsw:search_ef=200`), so `python -m src.eval_retrieval` returns the same table on
@@ -81,8 +90,9 @@ of dense-only retrieval on short or low-content queries.
   else. Terminology and figures are frozen at 2016; it is a health-economics/policy
   glossary, so it has no dosage-form entries (e.g. no "enteric coating").
 - **Dense-only retrieval.** `all-MiniLM-L6-v2` is small and fast but weak on bare
-  acronyms and closed-form spellings. A hybrid BM25+dense retriever would close most
-  of the remaining eval gap.
+  acronyms and closed-form spellings. Measured against the BM25 baseline, a hybrid
+  union lifts hit@3 from 0.87 to 0.90; the remaining misses are shared by both
+  retrievers and need alias expansion.
 - **Extraction residue.** The PDF's list-bullet glyphs (which decode as `»`/`(cid:2)`)
   are stripped during parsing; author names in source strings keep their accented
   Unicode. No characters are lost to replacement chars.
