@@ -10,6 +10,8 @@ says so instead of guessing.
 
 **Live demo:** https://pharma-gpt-rag-dpstrt54vjs64peusbfvzm.streamlit.app/
 
+![Pharma-GPT answering "What is bioavailability?" with the per-answer Sources panel showing the cited term, page, and relevance score](docs/screenshot.png)
+
 ## Problem
 
 Regulatory-affairs and market-access teams repeatedly hit unfamiliar pharma-policy
