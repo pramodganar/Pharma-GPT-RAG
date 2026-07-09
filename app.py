@@ -23,7 +23,8 @@ def _bridge_secrets():
     if not any(p.exists() for p in _SECRETS_PATHS):
         return
     try:
-        for key in ("GOOGLE_API_KEY", "LLM_PROVIDER"):
+        for key in ("GOOGLE_API_KEY", "LLM_PROVIDER", "GEMINI_MODEL",
+                    "OLLAMA_MODEL", "OLLAMA_BASE_URL"):
             if not os.getenv(key) and key in st.secrets:
                 os.environ[key] = str(st.secrets[key])
     except Exception:
@@ -34,7 +35,7 @@ _bridge_secrets()
 
 from src import config as cfg
 from src.embed_store import ensure_collection
-from src.llm_factory import friendly_error
+from src.llm_factory import active_model_name, friendly_error
 from src.rag_chain import answer_stream
 
 
@@ -71,10 +72,6 @@ h1 { color: var(--pharma-accent); font-weight: 700; letter-spacing: -0.5px; marg
 .stButton > button { border-radius: 8px; }
 </style>
 """
-
-
-def _model_name():
-    return cfg.GEMINI_MODEL if cfg.LLM_PROVIDER == "gemini" else cfg.OLLAMA_MODEL
 
 
 def _unique_sources(sources):
@@ -124,7 +121,7 @@ with st.sidebar:
     st.header("Settings")
     k = st.slider("Chunks retrieved (k)", min_value=cfg.K_MIN, max_value=cfg.K_MAX, value=cfg.TOP_K)
     st.text(f"Provider: {cfg.LLM_PROVIDER}")
-    st.text(f"Model: {_model_name()}")
+    st.text(f"Model: {active_model_name()}")
     st.divider()
     if st.button("Clear chat", use_container_width=True, disabled=not st.session_state.messages):
         st.session_state.messages = []

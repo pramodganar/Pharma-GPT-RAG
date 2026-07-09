@@ -18,11 +18,6 @@ def _chunk_text(term, body):
 
 
 def chunk_entries(entries):
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=cfg.MAX_CHUNK_CHARS,
-        chunk_overlap=cfg.CHUNK_OVERLAP_CHARS,
-        separators=["\n\n", "\n", ". ", " ", ""],
-    )
     chunks = []
     for entry in entries:
         term = entry["term"]

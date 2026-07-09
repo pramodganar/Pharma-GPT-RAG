@@ -9,8 +9,6 @@ import chromadb
 import pytest
 from chromadb.config import Settings
 
-from src import config as cfg
-
 try:
     from src.embed_store import embed
 

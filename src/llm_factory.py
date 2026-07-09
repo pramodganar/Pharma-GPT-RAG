@@ -36,6 +36,16 @@ def get_llm(provider=None):
     raise ValueError(f"unknown LLM_PROVIDER {provider!r}; supported: gemini, ollama")
 
 
+def active_model_name(provider=None):
+    """Name of the model get_llm would build, for display."""
+    provider = (provider or cfg.LLM_PROVIDER).lower()
+    if provider == "gemini":
+        return cfg.GEMINI_MODEL
+    if provider == "ollama":
+        return cfg.OLLAMA_MODEL
+    raise ValueError(f"unknown LLM_PROVIDER {provider!r}; supported: gemini, ollama")
+
+
 def friendly_error(exc):
     """Translate a backend exception into one human sentence, no stack trace."""
     text = str(exc)
@@ -45,5 +55,7 @@ def friendly_error(exc):
     if "429" in text or "quota" in low or "resourceexhausted" in low:
         return "The Gemini free-tier quota is exhausted for now. Try again later, or run locally with Ollama."
     if isinstance(exc, ConnectionError) or "connection" in low or "refused" in low:
-        return f"Cannot reach the local Ollama server ({cfg.OLLAMA_BASE_URL}). Start Ollama and pull {cfg.OLLAMA_MODEL}, or switch the provider to Gemini."
+        if cfg.LLM_PROVIDER == "ollama":
+            return f"Cannot reach the local Ollama server ({cfg.OLLAMA_BASE_URL}). Start Ollama and pull {cfg.OLLAMA_MODEL}, or switch the provider to Gemini."
+        return "Cannot reach the Gemini API. Check your network connection and try again."
     return f"The model backend is unavailable: {text}"
