@@ -88,6 +88,22 @@ def test_parse_pages_multiple_sources():
     assert entries[0]["sources"] == ["WHO 2002", "EU Directive 2001/83/EC"]
 
 
+def test_parse_pages_source_before_any_heading():
+    # A stray [Source: ...] line arriving before the first heading (e.g. bleed-over
+    # from an excluded page) has no entry to attach to and must be skipped, not crash.
+    page = "\n".join(
+        [
+            "[Source: orphaned attribution]",
+            bold("ABC Analysis"),
+            "Method by which medicines are divided.",
+            "[Source: Quick et al. 1997]",
+        ]
+    )
+    entries = ingest.parse_pages([page], start_page=9)
+    assert len(entries) == 1
+    assert entries[0]["sources"] == ["Quick et al. 1997"]
+
+
 def test_parse_pages_keeps_cross_reference():
     page = "\n".join(
         [

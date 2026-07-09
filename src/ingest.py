@@ -126,7 +126,8 @@ def parse_pages(pages, start_page=1):
                 continue
 
             prev_heading = False
-            if _SOURCE_OPEN.match(line):
+            # A stray [Source: line before any heading has no entry to attach to.
+            if _SOURCE_OPEN.match(line) and current is not None:
                 if "]" in line:
                     current["sources"].append(_finish_source(line))
                 else:
