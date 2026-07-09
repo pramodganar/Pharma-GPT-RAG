@@ -1,8 +1,10 @@
 # CPU-only torch so the Streamlit Cloud image fits the free tier: the model runs on
 # CPU, but the default build pulls ~2GB of unused nvidia CUDA packages. The +cpu wheel
 # is served from the extra index below and needs the Python version pinned to 3.12.
+# macOS has no +cpu builds (its wheels are CPU-only already), hence the markers.
 --extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.12.1+cpu
+torch==2.12.1+cpu; sys_platform != "darwin"
+torch==2.12.1; sys_platform == "darwin"
 
 langchain==0.3.27
 langchain-ollama==0.3.10
