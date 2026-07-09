@@ -90,8 +90,8 @@ Two checks on the answers themselves, layered on the retrieval hit@k above:
 - **Out-of-scope refusal — 3/3.** The adversarial probes (a drug dose, a
   general-knowledge question, a clinical recommendation) are each refused with the
   glossary-does-not-define-it response rather than answered. Computed by
-  `python -m src.eval_ragas` straight from the committed records — no LLM judge, so
-  it reproduces offline.
+  `python -m src.eval_ragas --refusal-only` straight from the committed records — no
+  LLM judge, so it reproduces offline.
 - **RAGAS faithfulness / answer relevancy / context precision.** The harness
   (`src/eval_ragas.py`, deps in `requirements-eval.txt`) scores the 6 in-scope
   answers with an LLM-as-judge. The triad needs ~18+ judge calls, which exceeds the
@@ -104,11 +104,13 @@ Two checks on the answers themselves, layered on the retrieval hit@k above:
 
 ## Setup
 
-Windows, Python 3.11+. From the project root:
+Python 3.11+ (developed on Windows; requirements resolve on macOS/Linux too). From
+the project root:
 
 ```
 python -m venv venv
-venv\Scripts\activate
+venv\Scripts\activate          # Windows
+source venv/bin/activate       # macOS/Linux
 pip install -r requirements.txt
 ```
 
@@ -120,7 +122,7 @@ python -m src.embed_store
 ```
 
 Re-parsing the PDF is only needed if you have the source file and want to change the
-ingest logic. Put `Pharmacy_Dictionary.pdf` at `data\raw\Pharmacy_Dictionary.pdf`
+ingest logic. Put `Pharmacy_Dictionary.pdf` at `data/raw/Pharmacy_Dictionary.pdf`
 first, then:
 
 ```
@@ -157,9 +159,10 @@ streamlit run app.py
 Generation eval (optional, needs a built index + a working provider):
 
 ```
+python -m src.eval_ragas --refusal-only   # offline refusal check, no judge calls
 pip install -r requirements-eval.txt
-python -m src.eval_ragas --generate   # run the pipeline, save records
-python -m src.eval_ragas              # score with RAGAS + refusal check
+python -m src.eval_ragas --generate       # run the pipeline, save records
+python -m src.eval_ragas                  # refusal check + RAGAS (live judge calls)
 ```
 
 ## Deploy to Streamlit Community Cloud
@@ -235,6 +238,9 @@ knowing:
 - **Dense-only retrieval.** Weak on bare acronyms / closed-form spellings (e.g.
   "copay" vs the glossary's "Co-payment"). Hybrid BM25+dense would close most of the
   gap.
+- **Small eval sets.** Retrieval is scored on 30 gold queries and generation on
+  6 in-scope + 3 adversarial records — enough to catch regressions, not to make
+  fine-grained comparisons between retrievers or models.
 - **No answer-level grounding check.** Refusal and citation are enforced by the
   prompt, not yet verified programmatically after generation.
 
