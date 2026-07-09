@@ -6,12 +6,14 @@ LLM provider. RAGAS itself is a heavy, separately-pinned dependency; install it 
 `pip install -r requirements-eval.txt` (kept out of requirements.txt to avoid
 disturbing the deploy stack's protobuf/grpcio pins).
 
-Two commands:
-  python -m src.eval_ragas --generate   build the {question, answer, contexts,
-                                         reference} records (needs index + LLM)
-  python -m src.eval_ragas              score the records with RAGAS (needs RAGAS
-                                         + the judge LLM), plus refusal rate on the
-                                         out-of-scope probes
+Three commands:
+  python -m src.eval_ragas --generate      build the {question, answer, contexts,
+                                            reference} records (needs index + LLM)
+  python -m src.eval_ragas --refusal-only  refusal rate on the out-of-scope probes,
+                                            from the committed records; offline, no
+                                            judge calls
+  python -m src.eval_ragas                 the refusal check, then RAGAS scoring
+                                            (needs RAGAS + a judge LLM)
 
 Caveat worth stating out loud: RAGAS uses an LLM to judge an LLM. Treat the numbers
 as a regression proxy validated against the human gold set and the refusal check,
@@ -102,9 +104,9 @@ def _refusal_rate(adversarial):
     return len(refusals), len(adversarial)
 
 
-def score():
-    """Score persisted records with RAGAS and print faithfulness / answer relevance /
-    context precision, plus the out-of-scope refusal rate."""
+def score(refusal_only=False):
+    """Score persisted records: the out-of-scope refusal rate (offline), then unless
+    refusal_only, faithfulness / answer relevance / context precision with RAGAS."""
     if not RECORDS_JSON.exists():
         print("no records found. run `python -m src.eval_ragas --generate` first.")
         return
@@ -116,6 +118,9 @@ def score():
         low = r["answer"].lower()
         ok = "REFUSED" if any(m in low for m in REFUSAL_MARKERS) else "ANSWERED (bad)"
         print(f"  [{ok}] {r['question']}")
+
+    if refusal_only:
+        return
 
     try:
         from datasets import Dataset
@@ -165,7 +170,7 @@ def main():
     if "--generate" in sys.argv:
         generate()
     else:
-        score()
+        score(refusal_only="--refusal-only" in sys.argv)
 
 
 if __name__ == "__main__":
