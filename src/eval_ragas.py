@@ -47,7 +47,18 @@ ADVERSARIAL = [
     "Which antibiotic should I take for a chest infection?",
 ]
 
-REFUSAL_MARKERS = ("does not define", "not define", "not covered", "no definition")
+REFUSAL_MARKERS = ("not define", "not covered", "no definition")
+
+# A genuine refusal is one short sentence (the committed ones run 51-84 chars);
+# in-scope answers start at ~215. The length cap catches the failure mode a marker
+# alone would miss: an answer that says "the glossary does not define X" and then
+# answers anyway from outside knowledge.
+REFUSAL_MAX_CHARS = 200
+
+
+def _refused(answer):
+    low = answer.lower()
+    return any(m in low for m in REFUSAL_MARKERS) and len(answer) <= REFUSAL_MAX_CHARS
 
 
 def _term_to_definition():
@@ -96,11 +107,7 @@ def generate():
 
 
 def _refusal_rate(adversarial):
-    def refused(a):
-        low = a.lower()
-        return any(m in low for m in REFUSAL_MARKERS)
-
-    refusals = [r for r in adversarial if refused(r["answer"])]
+    refusals = [r for r in adversarial if _refused(r["answer"])]
     return len(refusals), len(adversarial)
 
 
@@ -115,8 +122,7 @@ def score(refusal_only=False):
     refused, total = _refusal_rate(data["adversarial"])
     print(f"out-of-scope refusal rate: {refused}/{total}")
     for r in data["adversarial"]:
-        low = r["answer"].lower()
-        ok = "REFUSED" if any(m in low for m in REFUSAL_MARKERS) else "ANSWERED (bad)"
+        ok = "REFUSED" if _refused(r["answer"]) else "ANSWERED (bad)"
         print(f"  [{ok}] {r['question']}")
 
     if refusal_only:
