@@ -33,6 +33,11 @@ CHROMA_COLLECTION = "pharmacy_glossary"
 TOP_K = 5
 K_MIN = 1
 K_MAX = 10
+# "dense" (default, what the published hit@k measures) or "hybrid" (BM25 + dense
+# fused by reciprocal rank). Kept a flag so the dense numbers stay reproducible.
+RETRIEVER = os.getenv("RETRIEVER", "dense")
+# Candidates each retriever contributes to the fusion.
+HYBRID_CANDIDATES = 20
 
 # LLM
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")

@@ -47,6 +47,28 @@ def bm25_retriever():
     return retrieve
 
 
+def hybrid_retriever():
+    """Rank terms by the fused dense+BM25 ranking, or None if rank_bm25 is absent."""
+    try:
+        import rank_bm25  # noqa: F401
+    except ImportError:
+        return None
+    from .hybrid import retrieve
+
+    def _retrieve(query, k):
+        return [d["term"] for d in retrieve(query, k)]
+
+    return _retrieve
+
+
+def oracle_union_rate(dense_rows, bm25_rows, k):
+    """Ceiling for any fusion: the query counts as a hit if either retriever had the
+    term in its own top-k. A real fused ranking must fit both candidate sets into the
+    same k slots, so it lands at or below this."""
+    pairs = list(zip(dense_rows, bm25_rows))
+    return sum(d["hits"][k] or b["hits"][k] for d, b in pairs) / len(pairs) if pairs else 0.0
+
+
 def evaluate(queries=None, retriever=None):
     if queries is None:
         with open(cfg.EVAL_QUERIES_JSON, encoding="utf-8") as f:
@@ -88,10 +110,23 @@ def main():
 
     bm25 = bm25_retriever()
     if bm25 is None:
-        print("\nrank_bm25 not installed; skipping the lexical baseline.")
+        print("\nrank_bm25 not installed; skipping the lexical baseline and hybrid.")
     else:
+        bm25_results = evaluate(retriever=bm25)
         print("\nBM25 lexical baseline (same chunks, same queries):")
-        print(_table(evaluate(retriever=bm25)))
+        print(_table(bm25_results))
+
+        print("\nhybrid (reciprocal rank fusion of the two above):")
+        hybrid_results = evaluate(retriever=hybrid_retriever())
+        print(_table(hybrid_results))
+
+        print("\noverall hit@k, dense / BM25 / hybrid / oracle union ceiling:")
+        for k in KS:
+            print(
+                f"  hit@{k}: {_rate(results, k):.2f} / {_rate(bm25_results, k):.2f} / "
+                f"{_rate(hybrid_results, k):.2f} / "
+                f"{oracle_union_rate(results, bm25_results, k):.2f}"
+            )
 
     misses = [r for r in results if not r["hits"][3]]
     print(f"\nmisses at hit@3: {len(misses)}")

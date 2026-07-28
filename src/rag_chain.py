@@ -34,6 +34,11 @@ Answer:"""
 
 def retrieve(question, k=None):
     k = k or cfg.TOP_K
+    if cfg.RETRIEVER == "hybrid":
+        from .hybrid import retrieve as hybrid_retrieve
+
+        return hybrid_retrieve(question, k)
+
     # ensure_ rather than get_: an unbuilt index raises a Chroma "collection does not
     # exist" that friendly_error can only report as a backend failure, blaming the LLM
     # for a missing index. Building it is what the caller wanted anyway.

@@ -16,7 +16,7 @@ pillow==11.1.0
 streamlit==1.41.1
 python-dotenv==1.0.1
 pytest==8.3.4  # test-only; unused at runtime, kept so a fresh clone can run the suite
-rank-bm25==0.2.2  # eval-only; the lexical baseline in src/eval_retrieval.py
+rank-bm25==0.2.2  # the lexical half of src/hybrid.py and the baseline in src/eval_retrieval.py
 
 # Pinned to resolve the langchain-google-genai / streamlit protobuf conflict:
 # streamlit needs protobuf<6, google-genai's newer stack wants >=6. 5.29 + the
