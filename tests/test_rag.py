@@ -1,5 +1,5 @@
 from src import rag_chain
-from src.rag_chain import PROMPT, answer, cited_terms, format_context
+from src.rag_chain import PROMPT, answer, answer_stream, cited_terms, format_context
 
 
 def _doc(term, page, dist=0.2):
@@ -21,6 +21,22 @@ class _CapturingLLM:
             content = "canned grounded answer"
 
         return _Resp()
+
+
+class _StreamingLLM:
+    """Stand-in that streams fixed chunks and records when streaming started, so the
+    'citations are ready before generation' contract can be asserted."""
+
+    def __init__(self, chunks=("canned ", "grounded ", "answer")):
+        self.chunks = chunks
+        self.seen = None
+        self.stream_started = False
+
+    def stream(self, messages):
+        self.seen = messages
+        self.stream_started = True
+        for c in self.chunks:
+            yield type("_Chunk", (), {"content": c})
 
 
 def test_format_context_carries_term_and_page():
@@ -60,3 +76,58 @@ def test_answer_injects_retrieved_context_into_llm_call(monkeypatch):
     assert "Bioavailability" in prompt_text
     assert "15" in prompt_text
     assert "What is bioavailability?" in prompt_text
+
+
+# answer_stream is the only path app.py calls, so it carries the same guarantees as
+# answer() and is tested to the same depth.
+
+
+def test_answer_stream_yields_the_full_answer(monkeypatch):
+    docs = [_doc("Bioavailability", 15)]
+    monkeypatch.setattr(rag_chain, "retrieve", lambda q, k=None: docs)
+    llm = _StreamingLLM()
+
+    sources, tokens = answer_stream("What is bioavailability?", llm=llm)
+
+    assert sources == docs
+    assert "".join(tokens) == "canned grounded answer"
+
+
+def test_answer_stream_returns_sources_before_generation(monkeypatch):
+    # The UI renders citations off the returned sources, so retrieval must be done
+    # up front: nothing may be streamed until the caller consumes the generator.
+    monkeypatch.setattr(rag_chain, "retrieve", lambda q, k=None: [_doc("Bioavailability", 15)])
+    llm = _StreamingLLM()
+
+    sources, tokens = answer_stream("What is bioavailability?", llm=llm)
+
+    assert sources and not llm.stream_started
+    next(tokens)
+    assert llm.stream_started
+
+
+def test_answer_stream_uses_the_same_grounded_prompt(monkeypatch):
+    # A divergence here would mean the deployed path loses the refusal/citation rules
+    # that only answer()'s test covers.
+    monkeypatch.setattr(rag_chain, "retrieve", lambda q, k=None: [_doc("Pharmacovigilance", 88)])
+    llm = _StreamingLLM()
+
+    _, tokens = answer_stream("What is pharmacovigilance?", llm=llm)
+    list(tokens)
+
+    prompt_text = " ".join(m.content for m in llm.seen)
+    assert "Pharmacovigilance" in prompt_text
+    assert "88" in prompt_text
+    assert "What is pharmacovigilance?" in prompt_text
+
+
+def test_answer_stream_passes_k_through(monkeypatch):
+    # The sidebar slider sets k; it has to reach the retriever.
+    seen_k = []
+    monkeypatch.setattr(
+        rag_chain, "retrieve", lambda q, k=None: seen_k.append(k) or [_doc("X", 1)]
+    )
+
+    answer_stream("q", k=9, llm=_StreamingLLM())
+
+    assert seen_k == [9]
