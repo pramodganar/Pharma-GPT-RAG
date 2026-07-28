@@ -158,8 +158,10 @@ def score(refusal_only=False):
     # workers, which instantly trips the Gemini free tier's per-minute limit and
     # returns NaN for the call-heavy metrics (faithfulness, context precision). One
     # worker with long timeouts and retries clears the per-minute limit; note the
-    # separate free-tier daily cap (20 requests/day) can still exhaust before the
-    # ~18-call triad finishes -- use a paid key or a local Ollama judge to complete it.
+    # separate free-tier daily cap (20 requests/day) can still exhaust before the triad
+    # finishes: it costs ~40 judge calls on these records (context precision alone is
+    # one call per retrieved context, 6 records x k=5) -- use a paid key or a local
+    # Ollama judge to complete it.
     run_config = RunConfig(max_workers=1, timeout=600, max_retries=15, max_wait=90)
     result = evaluate(
         ds,
