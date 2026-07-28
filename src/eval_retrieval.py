@@ -49,7 +49,8 @@ def bm25_retriever():
 
 def evaluate(queries=None, retriever=None):
     if queries is None:
-        queries = json.load(open(cfg.EVAL_QUERIES_JSON, encoding="utf-8"))
+        with open(cfg.EVAL_QUERIES_JSON, encoding="utf-8") as f:
+            queries = json.load(f)
     retriever = retriever or _retrieved_terms
     maxk = max(KS)
     results = []

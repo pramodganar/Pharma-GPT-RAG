@@ -62,7 +62,8 @@ def _refused(answer):
 
 
 def _term_to_definition():
-    entries = json.load(open(cfg.ENTRIES_JSON, encoding="utf-8"))
+    with open(cfg.ENTRIES_JSON, encoding="utf-8") as f:
+        entries = json.load(f)
     return {e["term"]: e["definition_text"] for e in entries}
 
 
@@ -117,7 +118,8 @@ def score(refusal_only=False):
     if not RECORDS_JSON.exists():
         print("no records found. run `python -m src.eval_ragas --generate` first.")
         return
-    data = json.load(open(RECORDS_JSON, encoding="utf-8"))
+    with open(RECORDS_JSON, encoding="utf-8") as f:
+        data = json.load(f)
 
     refused, total = _refusal_rate(data["adversarial"])
     print(f"out-of-scope refusal rate: {refused}/{total}")

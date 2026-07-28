@@ -44,7 +44,8 @@ def chunk_entries(entries):
 
 
 def load_chunks():
-    entries = json.load(open(cfg.ENTRIES_JSON, encoding="utf-8"))
+    with open(cfg.ENTRIES_JSON, encoding="utf-8") as f:
+        entries = json.load(f)
     return chunk_entries(entries)
 
 
