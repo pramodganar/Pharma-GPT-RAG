@@ -8,7 +8,7 @@ import sys
 from langchain_core.prompts import ChatPromptTemplate
 
 from . import config as cfg
-from .embed_store import embed, get_collection
+from .embed_store import embed, ensure_collection
 from .llm_factory import friendly_error, get_llm
 
 PROMPT = ChatPromptTemplate.from_template(
@@ -34,7 +34,10 @@ Answer:"""
 
 def retrieve(question, k=None):
     k = k or cfg.TOP_K
-    res = get_collection().query(query_embeddings=embed([question]), n_results=k)
+    # ensure_ rather than get_: an unbuilt index raises a Chroma "collection does not
+    # exist" that friendly_error can only report as a backend failure, blaming the LLM
+    # for a missing index. Building it is what the caller wanted anyway.
+    res = ensure_collection().query(query_embeddings=embed([question]), n_results=k)
     docs = []
     for text, meta, dist in zip(
         res["documents"][0], res["metadatas"][0], res["distances"][0]
