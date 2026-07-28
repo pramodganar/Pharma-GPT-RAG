@@ -10,11 +10,11 @@ jobs:
   pytest:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # 3.12 is the top of the supported range (README §Setup): the pinned wheels
       # (pillow, grpcio, chroma-hnswlib, torch+cpu) have no 3.13+ builds.
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip

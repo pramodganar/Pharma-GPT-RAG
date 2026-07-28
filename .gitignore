@@ -9,5 +9,6 @@ data/raw/*
 .streamlit/
 .vscode/
 .idea/
+.claude/
 .DS_Store
 .ipynb_checkpoints/
