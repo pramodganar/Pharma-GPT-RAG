@@ -1,0 +1,39 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 3.12 is the top of the supported range (README §Setup): the pinned wheels
+      # (pillow, grpcio, chroma-hnswlib, torch+cpu) have no 3.13+ builds.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # The suite is offline apart from the one-time embedding-model download; the
+      # integration tests skip with a stated reason if it cannot be fetched.
+      - name: Run tests
+        run: pytest -q
+
+      # Cheap drift guard: these are the numbers the README and report.md publish.
+      - name: Check the corpus stats still match the docs
+        run: |
+          python -m src.chunking | tee stats.txt
+          grep -q "chunks: 444 from entries" stats.txt
+          grep -q "min/median/max: 54 / 324 / 1200" stats.txt
+          grep -q "entries that were split: 23" stats.txt
