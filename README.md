@@ -156,7 +156,9 @@ python -m src.embed_store
 ```
 
 The Streamlit app also builds the index on first boot if it is missing, so running
-`src.embed_store` by hand is optional locally.
+`src.embed_store` by hand is optional locally. Rebuilding leaves Chroma's previous
+HNSW segment directory behind each time; `python -m src.embed_store --clean` wipes
+`chroma_db/` first and rebuilds from scratch.
 
 Pick a provider. **Path A — Gemini (the hosted-demo path):** get a free key at
 Google AI Studio, then create `.env` from `.env.example`:

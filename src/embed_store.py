@@ -1,9 +1,13 @@
 """Embed chunks with all-MiniLM-L6-v2 and persist them to a local ChromaDB store.
 
 Running this rebuilds the collection from scratch. Build with: python -m src.embed_store
+Add --clean to wipe the store directory first, reclaiming the segment dirs Chroma
+leaves behind on every rebuild.
 """
 
 import logging
+import shutil
+import sys
 
 import chromadb
 from chromadb.config import Settings
@@ -41,6 +45,30 @@ def get_client():
 
 def embed(texts):
     return get_embedder().encode(list(texts), normalize_embeddings=True).tolist()
+
+
+def clean_store():
+    """Delete the persist directory so the next build starts from nothing.
+
+    delete_collection drops the collection from Chroma's metadata db but leaves its
+    HNSW segment directory on disk, so repeated rebuilds accumulate orphaned segments
+    (8 dirs / 26 MB for one collection here). Removing the directory is the only
+    cleanup that does not depend on Chroma's internals, which differ across the
+    versions this repo has been run on.
+
+    Only valid before a client is open — an open client holds the sqlite file, and on
+    Windows the delete would fail half-done. Hence a deliberate maintenance command
+    (`python -m src.embed_store --clean`) in a fresh process, never something
+    ensure_collection does behind the running app's back.
+    """
+    global _client
+    if _client is not None:
+        raise RuntimeError(
+            "a Chroma client is already open in this process; run "
+            "`python -m src.embed_store --clean` on its own instead"
+        )
+    if cfg.CHROMA_DIR.exists():
+        shutil.rmtree(cfg.CHROMA_DIR)
 
 
 def build():
@@ -99,6 +127,9 @@ def query(text, k=None):
 
 
 def main():
+    if "--clean" in sys.argv:
+        clean_store()
+        print(f"removed {cfg.CHROMA_DIR}")
     coll = build()
     print(f"built collection '{cfg.CHROMA_COLLECTION}' at {cfg.CHROMA_DIR}")
     print(f"vectors: {coll.count()}")

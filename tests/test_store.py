@@ -3,6 +3,9 @@ deploy has no index at all. The branches are cheap to test with a stub collectio
 so they are, rather than being exercised for the first time in production.
 """
 
+import pytest
+
+from src import config as cfg
 from src import embed_store
 
 
@@ -48,3 +51,34 @@ def test_empty_collection_is_rebuilt(monkeypatch):
 
     assert embed_store.ensure_collection().count() == 444
     assert built
+
+
+def test_clean_store_removes_the_directory(monkeypatch, tmp_path):
+    store = tmp_path / "chroma_db"
+    (store / "segment-uuid").mkdir(parents=True)
+    (store / "chroma.sqlite3").write_text("x")
+    monkeypatch.setattr(cfg, "CHROMA_DIR", store)
+    monkeypatch.setattr(embed_store, "_client", None)
+
+    embed_store.clean_store()
+
+    assert not store.exists()
+
+
+def test_clean_store_is_a_noop_on_a_missing_directory(monkeypatch, tmp_path):
+    monkeypatch.setattr(cfg, "CHROMA_DIR", tmp_path / "never-built")
+    monkeypatch.setattr(embed_store, "_client", None)
+    embed_store.clean_store()  # must not raise
+
+
+def test_clean_store_refuses_while_a_client_is_open(monkeypatch, tmp_path):
+    # Deleting the store under an open client leaves a half-removed directory on
+    # Windows, so the guard is the point of the function, not a formality.
+    store = tmp_path / "chroma_db"
+    store.mkdir()
+    monkeypatch.setattr(cfg, "CHROMA_DIR", store)
+    monkeypatch.setattr(embed_store, "_client", object())
+
+    with pytest.raises(RuntimeError, match="already open"):
+        embed_store.clean_store()
+    assert store.exists()
