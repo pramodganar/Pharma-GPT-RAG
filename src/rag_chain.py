@@ -58,6 +58,21 @@ def format_context(docs):
     return "\n\n".join(f"Term: {d['term']} (page {d['page']})\n{d['text']}" for d in docs)
 
 
+def unique_sources(docs):
+    """Collapse retrieved docs to one per (term, page), keeping the closest hit.
+
+    k=5 often returns several sub-chunks of one long entry; showing them as
+    separate sources reads as duplicates. Lives here rather than in the UI so the
+    citation view is testable without importing Streamlit.
+    """
+    best = {}
+    for d in docs:
+        key = (d["term"], d["page"])
+        if key not in best or d["distance"] < best[key]["distance"]:
+            best[key] = d
+    return list(best.values())
+
+
 def cited_terms(docs):
     seen = []
     for d in docs:

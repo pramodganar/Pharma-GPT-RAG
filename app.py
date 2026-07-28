@@ -36,7 +36,7 @@ _bridge_secrets()
 from src import config as cfg
 from src.embed_store import ensure_collection
 from src.llm_factory import active_model_name, friendly_error
-from src.rag_chain import answer_stream
+from src.rag_chain import answer_stream, unique_sources
 
 
 @st.cache_resource(show_spinner="Building the glossary index (first run only)...")
@@ -74,19 +74,10 @@ h1 { color: var(--pharma-accent); font-weight: 700; letter-spacing: -0.5px; marg
 """
 
 
-def _unique_sources(sources):
-    best = {}
-    for d in sources:
-        key = (d["term"], d["page"])
-        if key not in best or d["distance"] < best[key]["distance"]:
-            best[key] = d
-    return list(best.values())
-
-
 def _render_sources(sources):
     # term/page are interpolated into raw HTML; they come from the parsed glossary
     # (a trusted, static corpus), never from user input, so this is not injectable.
-    uniq = _unique_sources(sources)
+    uniq = unique_sources(sources)
     with st.expander(f"Sources ({len(uniq)})"):
         for d in uniq:
             relevance = max(0.0, 1.0 - d["distance"])

@@ -1,5 +1,12 @@
 from src import rag_chain
-from src.rag_chain import PROMPT, answer, answer_stream, cited_terms, format_context
+from src.rag_chain import (
+    PROMPT,
+    answer,
+    answer_stream,
+    cited_terms,
+    format_context,
+    unique_sources,
+)
 
 
 def _doc(term, page, dist=0.2):
@@ -48,6 +55,30 @@ def test_format_context_carries_term_and_page():
 def test_cited_terms_dedupes_preserving_order():
     docs = [_doc("Bioavailability", 15), _doc("Bioavailability", 15), _doc("Bioequivalence", 16)]
     assert cited_terms(docs) == [("Bioavailability", 15), ("Bioequivalence", 16)]
+
+
+def test_unique_sources_keeps_the_closest_hit_per_term():
+    # Sub-chunks of one long entry share term+page; the Sources panel must show the
+    # entry once, at its best distance, not once per sub-chunk.
+    docs = [
+        _doc("Bioavailability", 15, dist=0.42),
+        _doc("Bioavailability", 15, dist=0.19),
+        _doc("Bioequivalence", 16, dist=0.31),
+    ]
+    uniq = unique_sources(docs)
+    assert [(d["term"], d["distance"]) for d in uniq] == [
+        ("Bioavailability", 0.19),
+        ("Bioequivalence", 0.31),
+    ]
+
+
+def test_unique_sources_separates_the_same_term_on_different_pages():
+    docs = [_doc("Access", 11), _doc("Access", 90)]
+    assert len(unique_sources(docs)) == 2
+
+
+def test_unique_sources_handles_no_results():
+    assert unique_sources([]) == []
 
 
 def test_prompt_enforces_grounding_and_refusal():
