@@ -66,10 +66,29 @@ overall      30   0.70   0.87   0.87   overall      30   0.70   0.87   0.87
 ```
 
 BM25 ties dense overall and edges it at hit@1 on paraphrases and abbreviations;
-dense wins direct hit@1. The retrievers miss different queries: 3 of 30 are missed
-by both at hit@3, so a hybrid union would reach 0.90. The shared misses ("copay"
-and two terse paraphrases) have neither a lexical nor a semantic bridge to their
-entries — those need acronym/alias expansion, not a better ranker.
+dense wins direct hit@1. The retrievers miss different queries, so a hybrid was
+built and measured (`RETRIEVER=hybrid`, reciprocal rank fusion):
+
+```
+overall   hit@1  hit@3  hit@5
+dense      0.70   0.87   0.87
+BM25       0.70   0.87   0.87
+hybrid     0.77   0.87   0.87
+ceiling    0.83   0.90   0.90
+```
+
+The prediction in the previous version of this report — that a hybrid would reach
+hit@3 0.90 — was wrong, and worth recording as wrong. 0.90 is the oracle ceiling:
+the score if a query counts as a hit whenever *either* retriever has the term in its
+own top-3. A fused ranking has to place both retrievers' candidates in the same 3
+slots, and the swaps cost what they gain, so hit@3 stays 0.87. The gain is at hit@1
+(0.70 -> 0.77), concentrated on abbreviations (0.70 -> 0.90) and paraphrases
+(0.40 -> 0.50), and it costs one direct query (1.00 -> 0.90). Since the prompt asks
+the model to answer from the single most relevant term, hit@1 is the metric worth
+buying — but the direct-category regression is why hybrid is a flag and dense stays
+the default. The shared misses ("copay" and two terse paraphrases) have neither a
+lexical nor a semantic bridge to their entries and need acronym/alias expansion; no
+ranker can retrieve what neither signal reaches.
 
 These numbers are reproducible: retrieval uses a wide HNSW search beam
 (`hnsw:search_ef=200`), so `python -m src.eval_retrieval` returns the same table on
@@ -104,10 +123,10 @@ Layered on the retrieval hit@k (which is generation-free and non-circular):
 - **Single document, 2016 vintage.** The assistant knows this glossary and nothing
   else. Terminology and figures are frozen at 2016; it is a health-economics/policy
   glossary, so it has no dosage-form entries (e.g. no "enteric coating").
-- **Dense-only retrieval.** `all-MiniLM-L6-v2` is small and fast but weak on bare
-  acronyms and closed-form spellings. Measured against the BM25 baseline, a hybrid
-  union lifts hit@3 from 0.87 to 0.90; the remaining misses are shared by both
-  retrievers and need alias expansion.
+- **Retrieval recall is capped by vocabulary, not by ranking.** `all-MiniLM-L6-v2`
+  is small and fast but weak on bare acronyms and closed-form spellings. Hybrid
+  fusion lifts hit@1 but leaves hit@3 at 0.87, because the remaining misses are
+  shared by both retrievers and need alias expansion.
 - **Extraction residue.** The PDF's list-bullet glyphs (which decode as `»`/`(cid:2)`)
   are stripped during parsing; author names in source strings keep their accented
   Unicode. No characters are lost to replacement chars.
@@ -116,7 +135,8 @@ Layered on the retrieval hit@k (which is generation-free and non-circular):
 
 ## Next steps
 
-- Hybrid retrieval (BM25 union dense) with a reranker; re-run the eval set.
+- A cross-encoder reranker over the fused candidate set: fusion moved hit@1 but not
+  hit@3, so reordering candidates is the next lever.
 - An acronym/synonym expansion map built from the parenthetical aliases already in
   the term headings.
 - A post-generation check that every cited term actually appears in the retrieved

@@ -10,7 +10,7 @@ says so instead of guessing.
 
 **Live demo:** https://pharma-gpt-rag-dpstrt54vjs64peusbfvzm.streamlit.app/
 
-![Pharma-GPT answering "What is bioavailability?" with the per-answer Sources panel showing the cited term, page, and relevance score](docs/screenshot.png)
+![Pharma-GPT answering "What is bioavailability?": the answer streams in, cites the glossary term and page, and the Sources panel lists each retrieved entry with its page and relevance score](docs/demo.gif)
 
 ## Problem
 
@@ -84,9 +84,42 @@ overall      30   0.70   0.87   0.87   overall      30   0.70   0.87   0.87
 
 The baseline is a finding, not a formality: BM25 ties dense overall (0.70 / 0.87 /
 0.87) and edges it at hit@1 on paraphrases and abbreviations, while dense wins
-direct hit@1 (1.00 vs 0.80). The two retrievers miss different queries — only 3 of
-30 are missed by both at hit@3, so a hybrid union would reach 0.90 — which is why
-hybrid BM25+dense is the first upgrade rather than a bigger embedding model.
+direct hit@1 (1.00 vs 0.80). The two retrievers miss different queries, which is why
+hybrid BM25+dense was built next rather than a bigger embedding model.
+
+### Hybrid retrieval, and a prediction that did not hold
+
+`RETRIEVER=hybrid` fuses the two rankings with reciprocal rank fusion (rank-based,
+so no score normalisation between cosine distance and BM25). Measured on the same
+30 queries:
+
+```
+overall hit@1  hit@3  hit@5      per-category hit@1 (hybrid):
+dense    0.70   0.87   0.87        direct       0.90  (dense 1.00)
+BM25     0.70   0.87   0.87        paraphrased  0.50  (dense 0.40)
+hybrid   0.77   0.87   0.87        abbreviation 0.90  (dense 0.70)
+ceiling  0.83   0.90   0.90
+```
+
+An earlier draft of this README predicted a hybrid would reach hit@3 0.90. **It does
+not.** That 0.90 is the *oracle ceiling* — the score if a query counts as a hit
+whenever either retriever has the term anywhere in its own top-3. A real fused
+ranking has to fit both retrievers' candidates into the same 3 slots, and here the
+swaps cost exactly what they gain: hit@3 stays 0.87. The ceiling row is now printed
+by the eval so the difference between "either retriever knew it" and "the fused
+ranking ranked it" cannot be conflated again.
+
+What the fusion does buy is **hit@1: 0.70 → 0.77**, which is the metric that matters
+most here, because the prompt tells the model to answer from the single most relevant
+term. The gain is concentrated where each retriever was weak alone — abbreviations
+0.70 → 0.90, paraphrases 0.40 → 0.50 — and it costs one direct query (1.00 → 0.90),
+where dense alone was perfect.
+
+Dense stays the default so the published numbers above remain the reproducible ones;
+hybrid is one env var (`RETRIEVER=hybrid`). Given the trade is +0.07 overall hit@1
+against a regression on the category the glossary is most often queried with, that
+is a judgement call, not a free win — which is why it is a flag rather than a
+silent replacement.
 
 Paraphrase queries are worded to share few words with their target definition, so
 that score measures semantic retrieval, not lexical overlap. `hit@3 == hit@5`
@@ -223,7 +256,8 @@ it. Deploy steps:
 src/ingest.py         PDF -> structured entries (data/processed/entries.json)
 src/chunking.py       entries -> term-aware chunks
 src/embed_store.py    chunks -> ChromaDB (chroma_db/)
-src/eval_retrieval.py hit@k over a 30-query gold set (dense + BM25 baseline)
+src/hybrid.py         BM25 + dense fused by reciprocal rank (RETRIEVER=hybrid)
+src/eval_retrieval.py hit@k over a 30-query gold set (dense, BM25, hybrid)
 src/eval_ragas.py     generation eval (RAGAS + out-of-scope refusal rate)
 src/llm_factory.py    provider selection (gemini | ollama)
 src/rag_chain.py      retrieve -> prompt -> answer
@@ -243,8 +277,11 @@ knowing:
   cap, and those split on natural boundaries with a term-name prefix so the pieces
   still retrieve on the term.
 - **all-MiniLM-L6-v2** for CPU size/speed on a free hosted demo. The honest cost —
-  weaker recall on bare acronyms and terse paraphrases — is what the eval measures;
-  hybrid BM25+dense or mpnet is the documented first upgrade.
+  weaker recall on bare acronyms and terse paraphrases — is what the eval measures.
+- **Hybrid behind a flag, not by default.** Reciprocal rank fusion of BM25 and dense
+  buys +0.07 hit@1 but nothing at hit@3, and regresses direct hit@1 from 1.00 to
+  0.90. A measured trade-off with a real downside belongs behind `RETRIEVER=hybrid`,
+  not silently swapped in under numbers that were published for dense.
 - **ChromaDB** for on-disk persistence + per-vector metadata (term, page, source) in
   one call, which is exactly what citation needs. At 444 vectors the deciding factor
   was less glue code, not speed.
@@ -264,10 +301,11 @@ knowing:
   terminology and figures are frozen at 2016. It is a health-economics/policy
   glossary, so it has no dosage-form or clinical entries — those questions are
   refused, not answered. **Not medical advice.**
-- **Dense-only retrieval.** Weak on bare acronyms / closed-form spellings (e.g.
-  "copay" vs the glossary's "Co-payment"). Measured against the BM25 baseline: a
-  hybrid union would lift hit@3 from 0.87 to 0.90, but 3 of 30 queries ("copay"
-  among them) are missed by both retrievers and need alias expansion instead.
+- **Retrieval recall is capped by the corpus vocabulary.** Dense alone is weak on
+  bare acronyms and closed-form spellings ("copay" vs the glossary's "Co-payment");
+  hybrid fixes some of that at hit@1 but not hit@3, because 3 of 30 queries ("copay"
+  among them) are missed by *both* retrievers. Those need acronym/alias expansion —
+  no ranker can retrieve a term that neither signal reaches.
 - **Small eval sets.** Retrieval is scored on 30 gold queries and generation on
   6 in-scope + 3 adversarial records — enough to catch regressions, not to make
   fine-grained comparisons between retrievers or models.
@@ -278,12 +316,16 @@ knowing:
 
 Code is released under the [MIT License](LICENSE). The WHO/PPRI *Glossary of
 Pharmaceutical Terms* (2016) content it references belongs to its respective authors
-and is used for reference under its own terms, not relicensed here.
+and is used for reference under its own terms, not relicensed here — see
+[NOTICE](NOTICE). (The corpus note lives there rather than appended to `LICENSE`,
+which stops GitHub recognising the file as MIT.)
 
 ## Future work
 
-- Hybrid retrieval (BM25 union dense) + a reranker; re-run the eval set.
+- A cross-encoder reranker over the fused candidates — the fusion improved hit@1 but
+  left hit@3 flat, so reordering the candidate set is the next lever to try.
 - Acronym/synonym expansion built from the parenthetical aliases in term headings.
+  The 3 queries both retrievers miss are the ones this would fix.
 - A post-generation check that every cited term appears in the retrieved context.
 - A second glossary with namespaced collections to test multi-source retrieval.
 
