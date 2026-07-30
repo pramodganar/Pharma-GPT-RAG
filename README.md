@@ -6,6 +6,7 @@ terminology, grounded strictly in the WHO/PPRI *Glossary of Pharmaceutical Terms
 from them, citing the term and page. If the glossary does not cover a question, it
 says so instead of guessing.
 
+[![tests](https://github.com/pramodganar/Pharma-GPT-RAG/actions/workflows/tests.yml/badge.svg)](https://github.com/pramodganar/Pharma-GPT-RAG/actions/workflows/tests.yml)
 [![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://pharma-gpt-rag-dpstrt54vjs64peusbfvzm.streamlit.app/)
 
 **Live demo:** https://pharma-gpt-rag-dpstrt54vjs64peusbfvzm.streamlit.app/
@@ -23,8 +24,10 @@ get an explicit "not covered" when the question falls outside the glossary.
 
 Success criteria: (1) every answer grounded in a retrieved entry and cites term +
 page; (2) out-of-scope questions (e.g. drug dosages) are refused, not guessed;
-(3) retrieval finds the right entry (hit@3 0.87); (4) interactive latency (streamed
-tokens; a one-time ~9s index build on a cold deploy).
+(3) retrieval finds the right entry — hit@3 0.87 overall, though see the query-mix
+caveat below: the honest semantic number is paraphrase hit@3 0.70; (4) interactive
+latency — retrieval is 47 ms, with a one-time index build on a cold deploy (~14s on a
+laptop CPU) and streamed tokens thereafter.
 
 ## Corpus
 
@@ -35,7 +38,9 @@ one 140-page PDF with a real text layer (no OCR). Glossary content is pages 9-12
 front matter (1-8) and the reference list (129-140) are excluded. Its scope is
 pharmaceutical **policy and health economics** — pricing, reimbursement, HTA,
 ATC/DDD, pharmacovigilance — not drug formulations or clinical dosing, so formulation
-questions (e.g. enteric coating) fall outside it by design and are refused. Parsed
+questions (e.g. enteric coating) fall outside it by design. Refusal is measured on
+three out-of-scope probes — a drug dose, a general-knowledge question, a clinical
+recommendation — and a formulation probe is not yet among them. Parsed
 into **413 entries** `{term, definition_text, sources[], page_start}`. The one
 non-obvious thing: pdfplumber renders bold text (every term heading) as each glyph
 repeated four times — `AAAABBBBCCCC` for `ABC`. That artifact is both the problem
@@ -66,10 +71,24 @@ detector. See [DECISIONS.md](DECISIONS.md).
 ## Retrieval evaluation
 
 30 gold queries, 10 per category; the expected term must appear in the top-k
-retrieved chunks. Reproducible — `python -m src.eval_retrieval` prints the same
-tables every run (see *Design decisions* for why). A BM25 baseline over the same
-chunks and queries is scored alongside, so the dense numbers have something dumb
-to beat.
+retrieved chunks. Reproducible from a clean clone — `python -m src.eval_retrieval`
+prints the same tables every run (see *Design decisions* for why). A BM25 baseline
+over the same chunks and queries is scored alongside, so the dense numbers have
+something dumb to beat.
+
+**Read the categories before the overall row.** They are not equally hard, and the
+average hides that:
+
+| Category | What it actually tests | Dense hit@1 |
+|---|---|---|
+| direct (10) | Lexical lookup — the query is `"What is {term}?"` and the chunk's first line *is* that term | 1.00 |
+| abbreviation (10) | Mostly lexical — 9 of 10 acronyms are literal substrings of their expected term (`BIA` ⊂ `Budget Impact Analysis (BIA)`). Only `copay` → `Co-payment` is a genuine test, and it fails | 0.70 |
+| paraphrased (10) | Semantic — worded to share few content words with the target definition (overlap ~0.2–0.4) | **0.40** |
+
+So 20 of the 30 queries are near-trivial lookups, and the overall 0.87 is dominated by
+them. The number worth holding this project to is **paraphrase hit@3 0.70**. That BM25
+ties the dense retriever exactly is the corroborating evidence: a bag-of-words model
+should not match a semantic one unless most of the set is lexical.
 
 ```
 dense (all-MiniLM-L6-v2):              BM25 lexical baseline:
@@ -114,6 +133,13 @@ most here, because the prompt tells the model to answer from the single most rel
 term. The gain is concentrated where each retriever was weak alone — abbreviations
 0.70 → 0.90, paraphrases 0.40 → 0.50 — and it costs one direct query (1.00 → 0.90),
 where dense alone was perfect.
+
+**Size that gain honestly: n=30, so one query is 3.3 points of hit@k.** The +0.07 is
+two queries, and the direct-category regression is one. Every number on this page is
+quoted to two decimals because that is what the metric prints, not because the eval
+set can resolve two decimals — it cannot. Separating these retrievers properly needs a
+few hundred queries and a bootstrap interval, which is also why no fusion weights or
+`rrf_k` values were tuned here: at this n, tuning fits noise.
 
 Dense stays the default so the published numbers above remain the reproducible ones;
 hybrid is one env var (`RETRIEVER=hybrid`). Given the trade is +0.07 overall hit@1
@@ -193,6 +219,14 @@ The Streamlit app also builds the index on first boot if it is missing, so runni
 HNSW segment directory behind each time; `python -m src.embed_store --clean` wipes
 `chroma_db/` first and rebuilds from scratch.
 
+> **Known issue — a store written by a different Chroma version.** If `chroma_db/`
+> already exists and was built by a Chroma other than the pinned `0.5.23`, both
+> `streamlit run app.py` and `python -m src.eval_retrieval` fail with
+> `KeyError: '_type'` from inside Chroma. `ensure_collection` recovers from a missing
+> or empty store but not an unreadable one, and the error is not routed through the
+> friendly-error handler. Fix: `python -m src.embed_store --clean`. A fresh clone is
+> unaffected — `chroma_db/` is gitignored, so there is no store to be stale.
+
 Pick a provider. **Path A — Gemini (the hosted-demo path):** get a free key at
 Google AI Studio, then create `.env` from `.env.example`:
 
@@ -246,9 +280,10 @@ it. Deploy steps:
    GOOGLE_API_KEY = "your_key_here"
    ```
 
-4. First boot builds the vector index from `entries.json` (~9s, cached for the life
-   of the container); later starts are a no-op. Ollama is not reachable from
-   Community Cloud, so the hosted demo must use Gemini.
+4. First boot builds the vector index from `entries.json`, cached for the life of the
+   container; later starts are a no-op (measured: 13.5s to build 444 vectors and
+   ~13.6s to load the embedding model on a laptop CPU, 0.47s for the warm check).
+   Ollama is not reachable from Community Cloud, so the hosted demo must use Gemini.
 
 ## Layout
 
@@ -265,6 +300,8 @@ app.py                Streamlit chat UI
 src/config.py         all paths, model names, and parameters
 report.md             long-form project report (data profile, eval, limitations)
 DECISIONS.md          running log of design choices and rejected alternatives
+docs/AUDIT.md         adversarial review: claim-vs-code, reproduction, open defects
+docs/DEFENSE.md       every non-obvious choice and the alternatives it beat
 ```
 
 ## Key design decisions
@@ -306,9 +343,19 @@ knowing:
   hybrid fixes some of that at hit@1 but not hit@3, because 3 of 30 queries ("copay"
   among them) are missed by *both* retrievers. Those need acronym/alias expansion —
   no ranker can retrieve a term that neither signal reaches.
-- **Small eval sets.** Retrieval is scored on 30 gold queries and generation on
-  6 in-scope + 3 adversarial records — enough to catch regressions, not to make
-  fine-grained comparisons between retrievers or models.
+- **Small eval sets, and I wrote them.** Retrieval is scored on 30 gold queries and
+  generation on 6 in-scope + 3 adversarial records — enough to catch regressions, not
+  to make fine-grained comparisons between retrievers or models. One query is 3.3
+  points of hit@k. The queries are also self-authored from the parsed entries, which
+  caps what they can prove: an early draft had paraphrases lifted near-verbatim from
+  the definitions, which turned that category into a lexical test until I rewrote it.
+  A second annotator, or queries harvested from real usage, is the honest fix.
+- **Two-thirds of the query set is a lexical lookup.** See the category table above.
+  The overall hit@k is therefore optimistic as a measure of semantic retrieval, and
+  BM25 tying the dense retriever exactly is the evidence for that.
+- **No query logging.** Nothing records what users actually ask, how often the system
+  refuses in the wild, or how retrieval distances are distributed on real traffic — so
+  every prioritisation below rests on those 30 queries rather than on evidence.
 - **No answer-level grounding check.** Refusal and citation are enforced by the
   prompt, not yet verified programmatically after generation.
 
@@ -322,12 +369,29 @@ which stops GitHub recognising the file as MIT.)
 
 ## Future work
 
-- A cross-encoder reranker over the fused candidates — the fusion improved hit@1 but
-  left hit@3 flat, so reordering the candidate set is the next lever to try.
-- Acronym/synonym expansion built from the parenthetical aliases in term headings.
-  The 3 queries both retrievers miss are the ones this would fix.
-- A post-generation check that every cited term appears in the retrieved context.
-- A second glossary with namespaced collections to test multi-source retrieval.
+Ordered by what the evaluation actually supports, not by what sounds most advanced:
+
+- **Query logging plus a top-1 distance histogram.** Everything below is currently
+  prioritised from 30 self-authored queries; instrumentation is what would replace
+  that with evidence.
+- **Acronym/synonym expansion** built from the parenthetical aliases already sitting
+  unused in the term headings. The 3 queries *both* retrievers miss are the ones this
+  would fix — and no ranker can retrieve what neither signal reaches.
+- **A post-generation check** that every cited term appears in the retrieved context.
+  Deterministic and cheap, and it turns this project's central claim from a prompt
+  instruction into a verified property.
+- **Run all-mpnet-base-v2** on the same 30 queries and publish the delta. It is
+  documented throughout as the alternative to MiniLM but was never actually measured.
+- **Drop k from 5 to 3.** `hit@5 == hit@3` everywhere, so k=5 buys no recall and costs
+  two extra chunks of prompt on every call.
+- A cross-encoder reranker over the fused candidates — listed last deliberately.
+  `hit@3 == hit@5` says the remaining failures are recall, not ranking, and a reranker
+  reorders a candidate set that does not contain the answer. Worth measuring the
+  headroom first: how often is the right term in the 20-candidate fused set but
+  outside the top 3?
+- A second glossary with namespaced collections to test multi-source retrieval. Note
+  this breaks the `(term, page)` dedupe key and the eval's exact-term match, both of
+  which assume terms are unique across the corpus.
 
 ## Example
 
