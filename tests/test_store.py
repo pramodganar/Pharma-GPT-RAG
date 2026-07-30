@@ -53,6 +53,59 @@ def test_empty_collection_is_rebuilt(monkeypatch):
     assert built
 
 
+def _raise(exc):
+    def _f(*_args, **_kwargs):
+        raise exc
+
+    return _f
+
+
+def test_unreadable_store_names_the_clean_command(monkeypatch, tmp_path):
+    # The fourth state the original three branches missed: a store that exists and is
+    # non-empty but was written by another Chroma version, so get_collection AND build
+    # both fail on the same unparseable row. The user must get the fix, not a KeyError.
+    store = tmp_path / "chroma_db"
+    store.mkdir()
+    monkeypatch.setattr(cfg, "CHROMA_DIR", store)
+    monkeypatch.setattr(embed_store, "get_collection", _raise(KeyError("_type")))
+    monkeypatch.setattr(embed_store, "build", _raise(KeyError("_type")))
+
+    with pytest.raises(RuntimeError, match="--clean"):
+        embed_store.ensure_collection()
+
+
+def test_unreadable_store_message_survives_friendly_error(monkeypatch, tmp_path):
+    # app.py and the rag_chain CLI both render failures through friendly_error, which
+    # would otherwise report a broken index as "the model backend is unavailable".
+    from src import llm_factory
+
+    store = tmp_path / "chroma_db"
+    store.mkdir()
+    monkeypatch.setattr(cfg, "CHROMA_DIR", store)
+    monkeypatch.setattr(embed_store, "get_collection", _raise(KeyError("_type")))
+    monkeypatch.setattr(embed_store, "build", _raise(KeyError("_type")))
+
+    try:
+        embed_store.ensure_collection()
+    except RuntimeError as exc:
+        message = llm_factory.friendly_error(exc)
+
+    assert "--clean" in message
+    assert "backend is unavailable" not in message
+    assert "\n" not in message
+
+
+def test_build_failure_without_a_store_is_not_reported_as_staleness(monkeypatch, tmp_path):
+    # No store on disk means an ordinary build failure (missing entries.json, no disk).
+    # Blaming a stale store there would send the user to the wrong fix.
+    monkeypatch.setattr(cfg, "CHROMA_DIR", tmp_path / "never-built")
+    monkeypatch.setattr(embed_store, "get_collection", _raise(ValueError("does not exist")))
+    monkeypatch.setattr(embed_store, "build", _raise(FileNotFoundError("entries.json")))
+
+    with pytest.raises(FileNotFoundError):
+        embed_store.ensure_collection()
+
+
 def test_clean_store_removes_the_directory(monkeypatch, tmp_path):
     store = tmp_path / "chroma_db"
     (store / "segment-uuid").mkdir(parents=True)

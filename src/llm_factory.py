@@ -50,6 +50,11 @@ def friendly_error(exc):
     """Translate a backend exception into one human sentence, no stack trace."""
     text = str(exc)
     low = text.lower()
+    # A broken index is not a backend failure. ensure_collection already phrases this
+    # one as a user-facing sentence naming the fix, so pass it through rather than
+    # wrapping it in "the model backend is unavailable" and blaming the LLM.
+    if "chroma store" in low:
+        return text
     if "google_api_key" in low:
         return "No Gemini API key found. Add GOOGLE_API_KEY to your .env or the app secrets."
     if "429" in text or "quota" in low or "resourceexhausted" in low:

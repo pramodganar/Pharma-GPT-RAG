@@ -111,14 +111,34 @@ def get_collection():
 
 def ensure_collection():
     """Return the collection, building it from entries.json if it is missing or empty.
-    Lets a fresh deploy (e.g. Streamlit Cloud) come up without a pre-built index."""
+    Lets a fresh deploy (e.g. Streamlit Cloud) come up without a pre-built index.
+
+    A store written by a different Chroma version is a fourth case, and it is not
+    recoverable here: get_collection cannot parse it, and neither can build(), because
+    create_collection reads the same unparseable row while checking for a name clash.
+    clean_store is the fix but refuses to run once a client is open — and one is, by
+    now — so this raises a sentence naming the command instead of letting a Chroma
+    internal (KeyError: '_type') reach the user as a traceback.
+    """
     try:
         coll = get_collection()
         if coll.count() > 0:
             return coll
     except Exception:
         pass
-    return build()
+    try:
+        return build()
+    except Exception as exc:
+        # Only claim staleness when a store actually exists; otherwise this is an
+        # ordinary build failure (missing entries.json, no disk) and must surface as is.
+        if cfg.CHROMA_DIR.exists():
+            raise RuntimeError(
+                f"cannot read or rebuild the Chroma store at {cfg.CHROMA_DIR} "
+                f"(chromadb {chromadb.__version__}); it was most likely written by a "
+                "different Chroma version. Rebuild it with "
+                "`python -m src.embed_store --clean`."
+            ) from exc
+        raise
 
 
 def query(text, k=None):
