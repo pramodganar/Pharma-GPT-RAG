@@ -87,6 +87,11 @@ def test_production_index_configures_wide_beam():
 
     try:
         coll = get_collection()
-    except Exception:
+    except Exception as exc:
+        # "Not built yet" is the only legitimate skip. Anything else -- notably a store
+        # written by another Chroma version -- is a real failure, and swallowing it is
+        # how this guard silently stopped guarding once already.
+        if "does not exist" not in str(exc).lower():
+            raise
         pytest.skip("no built index; run python -m src.embed_store")
     assert (coll.metadata or {}).get("hnsw:search_ef", 10) >= 100
