@@ -37,3 +37,16 @@ jobs:
           grep -q "chunks: 444 from entries" stats.txt
           grep -q "min/median/max: 54 / 324 / 1200" stats.txt
           grep -q "entries that were split: 23" stats.txt
+
+      # The stats grep only proves the corpus did not move; it would pass with the
+      # retriever broken. This builds a real index and re-runs the eval, so the hit@k
+      # figures the README publishes are asserted rather than asserted-about. It is
+      # also the only step that exercises a real Chroma store -- the suite uses stubs
+      # and tmp_path, which is how a store-level failure stayed invisible to CI before.
+      - name: Build the index and check the published hit@k
+        run: |
+          python -m src.embed_store
+          python -m src.eval_retrieval | tee eval.txt
+          grep -q "hit@1: 0.70 / 0.70 / 0.77 / 0.83" eval.txt
+          grep -q "hit@3: 0.87 / 0.87 / 0.87 / 0.90" eval.txt
+          grep -q "hit@5: 0.87 / 0.87 / 0.87 / 0.90" eval.txt
